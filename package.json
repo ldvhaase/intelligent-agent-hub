@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "knowledge": "node knowledge-client/cli.mjs"
+    "knowledge": "node knowledge-client/cli.mjs",
+    "plan-story": "node story-planner/plan-story.mjs"
   },
   "dependencies": {
     "yaml": "^2.6.0"
