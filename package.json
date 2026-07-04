@@ -1,0 +1,12 @@
+{
+  "name": "agent-hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "knowledge": "node knowledge-client/cli.mjs"
+  },
+  "dependencies": {
+    "yaml": "^2.6.0"
+  }
+}

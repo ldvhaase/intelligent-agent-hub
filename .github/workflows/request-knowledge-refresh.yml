@@ -1,0 +1,45 @@
+# Reusable workflow. Place in: agent-hub/.github/workflows/request-knowledge-refresh.yml
+#
+# Called by service repos on push to their default branch. Dispatches a
+# knowledge-refresh-requested event to the wiki repo, which validates the
+# payload against its registry before scanning the exact commit.
+
+name: Request Knowledge Refresh
+
+on:
+  workflow_call:
+    inputs:
+      service_id:
+        description: Service ID as registered in the wiki knowledge registry
+        required: true
+        type: string
+      wiki_repository:
+        description: owner/name of the wiki repository to dispatch to
+        required: true
+        type: string
+    secrets:
+      KNOWLEDGE_DISPATCH_TOKEN:
+        description: Token with permission to send repository_dispatch to the wiki repo
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch knowledge refresh to wiki
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.KNOWLEDGE_DISPATCH_TOKEN }}
+          repository: ${{ inputs.wiki_repository }}
+          event-type: knowledge-refresh-requested
+          client-payload: |
+            {
+              "service_id": "${{ inputs.service_id }}",
+              "service_repo": "${{ github.repository }}",
+              "service_ref": "${{ github.sha }}",
+              "source_branch": "${{ github.ref_name }}",
+              "triggered_by": "${{ github.actor }}"
+            }
