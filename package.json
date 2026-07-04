@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "knowledge": "node knowledge-client/cli.mjs",
-    "plan-story": "node story-planner/plan-story.mjs"
+    "plan-story": "node story-planner/plan-story.mjs",
+    "execute-story": "node story-planner/execute-story.mjs"
   },
   "dependencies": {
     "yaml": "^2.6.0"
