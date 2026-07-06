@@ -1,0 +1,53 @@
+# Model-swap regression gate.
+#
+# Runs on a schedule (not only on pushes) because the thing it watches — which
+# model the platform actually serves behind each agent's identical prompt —
+# changes without any commit landing in this repo. A failing run means either
+# real drift on a pinned model, or a silent model substitution; both need a
+# human before agents keep shipping work.
+#
+# Wire a real agent runner by setting the repository variable EVAL_RUNNER_CMD
+# (e.g. a CLI that reads $TASK_PROMPT_PATH and writes $TASK_RESULT_PATH with
+# {"model": "...", "usage": {...}}). Without it the job runs the deterministic
+# dry-run runner, which still validates the harness, probes, and baselines.
+name: model-swap-regression
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+  push:
+    paths:
+      - "orchestrator/**"
+      - "evals/**"
+      - "package.json"
+      - ".github/workflows/model-regression.yml"
+
+jobs:
+  eval-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Unit tests
+        run: npm test
+      - name: Eval gate (per agent, per observed model)
+        env:
+          EVAL_RUNNER_CMD: ${{ vars.EVAL_RUNNER_CMD }}
+        run: |
+          if [ -n "$EVAL_RUNNER_CMD" ]; then
+            npm run eval-gate -- --runner cmd --cmd "$EVAL_RUNNER_CMD"
+          else
+            npm run eval-gate
+          fi
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: evals/reports/
+          if-no-files-found: ignore

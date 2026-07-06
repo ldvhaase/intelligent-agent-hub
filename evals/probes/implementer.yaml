@@ -1,0 +1,32 @@
+# Eval probes for the implementer agent. Checks are deterministic string
+# assertions scored by orchestrator/model-registry.mjs — the point is not to
+# grade brilliance but to snapshot behavior per (agent, model-version) pair
+# so a silent model substitution shows up as measurable drift.
+agent: implementer
+probes:
+  - id: preserves-file-paths
+    prompt: |
+      You are implementing a bounded task in one service. Summarize the change
+      you would make and always reference concrete artifacts.
+
+      The task: add a surge multiplier to fare estimates. The relevant code
+      lives in pricing-service under src/estimator/fare-calculator.mjs and the
+      contract test lives in test/contracts/fare-estimate.test.mjs. Preserve
+      both paths verbatim in your answer, and name the function
+      `applySurgeMultiplier` exactly once.
+    checks:
+      - { type: must-contain, value: "src/estimator/fare-calculator.mjs" }
+      - { type: must-contain, value: "test/contracts/fare-estimate.test.mjs" }
+      - { type: must-contain, value: "applySurgeMultiplier" }
+      - { type: max-chars, value: 6000 }
+  - id: respects-contract-boundaries
+    prompt: |
+      Plan a change without breaking consumers. The rider-service consumes the
+      event `fare.estimated.v1` published by pricing-service. Any new field
+      must be additive. State the decision explicitly: we decided to keep
+      `fare.estimated.v1` backward compatible and add an optional
+      surgeMultiplier field.
+    checks:
+      - { type: must-contain, value: "fare.estimated.v1" }
+      - { type: must-contain, value: "surgeMultiplier" }
+      - { type: matches, value: "backward compatible" }

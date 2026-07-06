@@ -6,7 +6,11 @@
   "scripts": {
     "knowledge": "node knowledge-client/cli.mjs",
     "plan-story": "node story-planner/plan-story.mjs",
-    "execute-story": "node story-planner/execute-story.mjs"
+    "execute-story": "node story-planner/execute-story.mjs",
+    "orchestrate": "node orchestrator/orchestrate.mjs",
+    "eval-gate": "node orchestrator/eval-gate.mjs",
+    "ledger": "node orchestrator/ledger-cli.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "yaml": "^2.6.0"
