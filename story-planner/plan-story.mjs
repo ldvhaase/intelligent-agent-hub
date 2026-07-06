@@ -182,6 +182,10 @@ const tasks = impactedIds.map((id) => ({
   task: `Implement "${title}" changes scoped to ${id}`,
   branch: `story/${slug}/${id}`,
   contextPack: `context-packs/${id}.md`,
+  // Callees this task depends on within the story — the orchestrator turns
+  // these into parallel execution waves without re-reading the wiki.
+  dependsOn: callsWithin.filter(([from]) => from === id).map(([, to]) => to).sort(),
+  agent: "implementer",
   status: "proposed",
   approved: false,
 }));

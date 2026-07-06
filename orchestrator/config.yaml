@@ -1,0 +1,48 @@
+# Orchestration layer config. Committed on purpose: changing a model pin,
+# a budget cap, or a drift threshold is a reviewable, blameable diff.
+
+budget:
+  # Hard ceiling for one orchestrate run. Reservations are taken against this
+  # BEFORE any dispatch; a wave that cannot be fully reserved never starts.
+  runCapUsd: 5.00
+  # Worst-case output tokens assumed per task when estimating a reservation.
+  maxOutputTokensPerTask: 8192
+
+# Model-swap policy. "fail" = a swap fails the eval gate / blocks the
+# orchestrator even if quality holds, until a human re-pins with --accept.
+onModelSwap: fail
+# Mean probe-score drop (0..1) tolerated before the eval gate fails.
+driftThreshold: 0.05
+
+# Agent assigned to planner tasks that don't name one.
+defaultAgent: implementer
+
+agents:
+  planner:
+    description: Decomposes stories and reconciles cross-service contracts.
+    pinnedModel: claude-opus-4-8
+    maxUsdPerTask: 1.00
+  implementer:
+    description: Implements one bounded, service-scoped task.
+    pinnedModel: claude-opus-4-8
+    maxUsdPerTask: 1.50
+  reviewer:
+    description: Reviews diffs and task briefings for contract violations.
+    pinnedModel: claude-sonnet-5
+    maxUsdPerTask: 0.50
+  summarizer:
+    description: Cheap utility agent for compaction assists and triage.
+    pinnedModel: claude-haiku-4-5
+    maxUsdPerTask: 0.10
+
+# USD per million tokens. Source: platform.claude.com pricing (2026-06).
+# Keep in sync when pins change; unknown models fall back to `default`
+# (priced at the most expensive tier so estimates stay pessimistic).
+pricing:
+  claude-fable-5: { input: 10.00, output: 50.00 }
+  claude-opus-4-8: { input: 5.00, output: 25.00 }
+  claude-opus-4-7: { input: 5.00, output: 25.00 }
+  claude-sonnet-5: { input: 3.00, output: 15.00 }
+  claude-sonnet-4-6: { input: 3.00, output: 15.00 }
+  claude-haiku-4-5: { input: 1.00, output: 5.00 }
+  default: { input: 10.00, output: 50.00 }

@@ -1,0 +1,12 @@
+agent: reviewer
+probes:
+  - id: flags-contract-risk
+    prompt: |
+      Review this briefing for contract risk. pricing-service changes the
+      response of GET /v1/fare-estimates while rider-service still calls it.
+      A correct review must mention the exact route GET /v1/fare-estimates
+      and end by naming the merge-order rule: callees merge before callers.
+    checks:
+      - { type: must-contain, value: "GET /v1/fare-estimates" }
+      - { type: must-contain, value: "callees merge before callers" }
+      - { type: max-chars, value: 6000 }

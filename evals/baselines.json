@@ -1,0 +1,25 @@
+{
+  "pins": {
+    "implementer": "claude-opus-4-8",
+    "reviewer": "claude-sonnet-5"
+  },
+  "baselines": {
+    "implementer::claude-opus-4-8": {
+      "score": 1,
+      "probeScores": {
+        "preserves-file-paths": 1,
+        "respects-contract-boundaries": 1
+      },
+      "recordedAt": "2026-07-05T03:21:46.118Z",
+      "probes": 2
+    },
+    "reviewer::claude-sonnet-5": {
+      "score": 1,
+      "probeScores": {
+        "flags-contract-risk": 1
+      },
+      "recordedAt": "2026-07-05T03:21:46.121Z",
+      "probes": 1
+    }
+  }
+}
