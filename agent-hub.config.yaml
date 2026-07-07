@@ -1,0 +1,31 @@
+# Central agent-hub configuration — the one file a team edits when adopting
+# this repo. Every value can be overridden per-invocation by an environment
+# variable (listed inline); relative paths resolve from the agent-hub root.
+#
+# Point AGENT_HUB_CONFIG at an alternate copy of this file to layer a local
+# or CI-specific override without touching the committed default.
+
+# Where the knowledge-network wiki checkout lives.
+# Env override: KNOWLEDGE_WIKI_PATH
+knowledgeWikiPath: ../knowledge-network
+
+# Where service repo checkouts live (execute-story expects <reposRoot>/<service>).
+# Env override: AGENT_HUB_REPOS_ROOT
+reposRoot: ..
+
+# Default runner for `hub orchestrate` / `hub eval-gate` when no --runner/--cmd
+# flags are passed. Start on dry-run; switch to the Copilot adapter once the
+# Copilot CLI is installed and authenticated:
+#   type: cmd
+#   cmd: node orchestrator/adapters/copilot.mjs
+runner:
+  type: dry-run
+  cmd: null
+
+# GitHub Copilot CLI settings used by orchestrator/adapters/copilot.mjs.
+# Env override for bin: COPILOT_CLI_BIN
+copilot:
+  bin: copilot
+  # Flags appended to every programmatic invocation. --allow-all is required
+  # for unattended tool use; tighten to per-tool allowlists per your policy.
+  extraArgs: ["--allow-all"]

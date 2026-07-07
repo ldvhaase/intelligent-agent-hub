@@ -30,6 +30,7 @@ import { compactHandoff } from "./handoff.mjs";
 import { openLedger } from "./ledger.mjs";
 import { loadBaselines } from "./model-registry.mjs";
 import { createRunner } from "./runner.mjs";
+import { runnerDefaults } from "../lib/project-config.mjs";
 
 function fail(msg) {
   console.error(`error: ${msg}`);
@@ -56,7 +57,9 @@ const maxParallel = Number(flag("max-parallel") ?? 4);
 const capUsd = Number(flag("budget-usd") ?? config.budget.runCapUsd);
 const onSwap = flag("on-swap") ?? config.onModelSwap ?? "fail";
 if (!["fail", "warn"].includes(onSwap)) fail(`--on-swap must be fail or warn`);
-const runner = createRunner({ type: flag("runner") ?? "dry-run", cmd: flag("cmd") });
+const runnerCfg = runnerDefaults();
+const runnerType = flag("runner") ?? runnerCfg.type;
+const runner = createRunner({ type: runnerType, cmd: flag("cmd") ?? runnerCfg.cmd });
 
 const story = YAML.parse(readFileSync(join(storyDir, "story.yaml"), "utf8"));
 const tasksDoc = YAML.parse(readFileSync(join(storyDir, "service-tasks.yaml"), "utf8"));
@@ -99,7 +102,7 @@ const runStarted = ledger.append({
   run: runId,
   actor: "orchestrator",
   action: "run-started",
-  data: { story: slug, waves, capUsd, maxParallel, onSwap, runner: flag("runner") ?? "dry-run" },
+  data: { story: slug, waves, capUsd, maxParallel, onSwap, runner: runnerType },
   evidence: [`${storyDir}/story.yaml`, `bundle:${story.bundleVersion}`],
 });
 
