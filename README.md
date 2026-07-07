@@ -7,6 +7,7 @@ Agent orchestration for the platform. Consumes the knowledge bundle produced by 
 - **story plans** that decompose a user story into per-service tasks with merge-order guidance
 - **story execution**: one service, one bounded task, one branch, one (draft) PR — behind a human approval gate
 - **orchestrated runs**: approved tasks executed as a parallel DAG with four controls around every dispatch — pre-dispatch budget reservation, a hash-chained decision ledger, compacted handoffs between stages, and model-swap detection
+- **audit logging**: append-only JSONL metering of token usage, cost, and outcomes per request
 
 Agents never scrape the Docusaurus site or re-analyze service repos: everything is answered from the wiki's `knowledge/` bundle through the client in this repo.
 
@@ -98,6 +99,10 @@ Enable it once in `agent-hub.config.yaml` (`runner: { type: cmd, cmd: node orche
 | `orchestrator/config.yaml` | Agent model pins, per-task cost caps, pricing, thresholds (committed) |
 | `evals/probes/*.yaml` | Deterministic probes scored per (agent, model-version) pair |
 | `evals/baselines.json` | Model pins + recorded baseline scores (committed) |
+| `audit/audit-log.mjs` | Lightweight append-only JSONL audit logger (`audit()` + helpers) |
+| `audit/cost-catalog.json` | Per-model token pricing for audit cost estimates (edit to add real rates) |
+| `audit/audit-summary.mjs` | Reads the audit log and prints token / cost / outcome totals |
+| `.audit/audit.jsonl` | Runtime audit log — created on first write, gitignored |
 | `stories/` | Planner/executor/orchestrator working output (gitignored) |
 | `test/` | `node --test` suite for the orchestration modules |
 | `.github/workflows/request-knowledge-refresh.yml` | Reusable workflow service repos call to request a wiki refresh |
@@ -352,6 +357,53 @@ case "$TASK_AGENT" in
   *)        exec orchestrator/adapters/claude.sh ;;
 esac
 ```
+
+## Audit logging
+
+Lightweight, append-only JSONL metering for agent/orchestrator requests — token usage, estimated cost, retrieval volume, artifacts, and outcomes — without a database. It answers "how many tokens did this request use, which agent/phase/model dominated, what did it cost, did it succeed?" One JSON object per line lands in `.audit/audit.jsonl` (created automatically on first write, gitignored).
+
+**This is metering, distinct from the [decision ledger](#2-decision-ledger-storiesslugledgerjsonl).** The ledger is the tamper-evident *accountability* record (hash-chained, causal links, one per story); the audit log is disposable *observability* (flat counters, one per repo). Different questions, deliberately separate files.
+
+### Emit events
+
+```js
+import { audit, createRequestId, estimateCostUsd } from "./audit/audit-log.mjs";
+
+const requestId = createRequestId("story");
+
+audit({ requestId, eventType: "request_started", requestType: "story_plan", status: "started",
+        metadata: { userStoryId: "US-1234" } });
+
+audit({ requestId, eventType: "llm_call", agent: "story-orchestrator", phase: "impact-analysis",
+        model: "gpt-5.5-thinking", status: "success",
+        inputTokens: 5200, outputTokens: 1800, totalTokens: 7000,
+        estimatedCostUsd: estimateCostUsd({ model: "gpt-5.5-thinking", inputTokens: 5200, outputTokens: 1800 }) });
+
+audit({ requestId, eventType: "request_completed", requestType: "story_plan", status: "completed" });
+```
+
+Event types: `request_started`, `tool_call`, `llm_call`, `artifact_created`, `request_completed`, `request_failed`. The logger auto-stamps an ISO timestamp and fills `totalTokens` when absent. **It never stores prompts or responses** — record hashes, artifact paths, chunk/service/request IDs, and `metadata` instead.
+
+Exports from `audit/audit-log.mjs`:
+
+- `audit(event)` — validate (`requestId`/`eventType`/`status` required), then append one line
+- `createRequestId(prefix)` — `prefix_<timestamp>_<random>` correlation id
+- `calculateTotalTokens(event)` — explicit `totalTokens`, else input+output+cached+reasoning
+- `estimateCostUsd({ model, inputTokens, ... })` — priced from `audit/cost-catalog.json` (edit that file to add real per-1M-token rates; ships at `0`)
+
+### Fail-open by default
+
+Audit failures never crash the caller — they `console.warn` and continue, so metering can't take down a run. Set `AUDIT_STRICT=true` to make failures throw instead (useful in tests).
+
+### Summarize
+
+```bash
+npm run audit:summary   # totals: started/completed/failed, LLM & tool calls, tokens,
+                        # estimated cost, most expensive request / agent / model
+npm run audit:clear     # delete .audit/ (cross-platform)
+```
+
+> Not yet auto-emitted by `orchestrate.mjs` — this is the logging library plus its summary CLI. Instrument `runTask()` to emit `llm_call` / `artifact_created` events if you want orchestrated runs to populate the audit log automatically.
 
 ## Tests
 
