@@ -16,12 +16,78 @@ Agents never scrape the Docusaurus site or re-analyze service repos: everything 
 npm install
 ```
 
-The client locates the wiki checkout via `KNOWLEDGE_WIKI_PATH` (default: `../knowledge-network`). All commands read the **committed** bundle there — refresh the wiki first if it is stale (`npm run knowledge:refresh-all` in the wiki repo, or the automated dispatch flow).
+Then review [`agent-hub.config.yaml`](agent-hub.config.yaml) — the one file a team edits when adopting this repo. All commands read the **committed** knowledge bundle in the wiki checkout it points at — refresh the wiki first if it is stale (`npm run knowledge:refresh-all` in the wiki repo, or the automated dispatch flow).
+
+## Configuration
+
+Central config lives in `agent-hub.config.yaml` at the repo root (loaded by `lib/project-config.mjs`). Precedence for every value: **env var > config file > built-in default**; relative paths resolve from the agent-hub root, so commands behave the same from any directory.
+
+| Key | Env override | Default | Used by |
+| --- | --- | --- | --- |
+| `knowledgeWikiPath` | `KNOWLEDGE_WIKI_PATH` | `../knowledge-network` | knowledge client (everything) |
+| `reposRoot` | `AGENT_HUB_REPOS_ROOT` | `..` | story executor (service checkouts) |
+| `runner.type` / `runner.cmd` | — (`--runner`/`--cmd` flags win) | `dry-run` | orchestrator, eval gate |
+| `copilot.bin` / `copilot.extraArgs` | `COPILOT_CLI_BIN` | `copilot` / `["--allow-all"]` | Copilot adapter |
+
+`AGENT_HUB_CONFIG=<path>` points all tooling at an alternate config file — useful for CI or a personal override without touching the committed default. Orchestration policy (model pins, per-task cost caps, pricing, drift thresholds) stays in [`orchestrator/config.yaml`](orchestrator/config.yaml); the split is deliberate: `agent-hub.config.yaml` is *where things are for your team*, `orchestrator/config.yaml` is *what agents are allowed to do*.
+
+## The flow (hub CLI)
+
+`npm run hub` is the single command surface for the whole pipeline — you never need to remember which script does what:
+
+```bash
+npm run hub -- plan --title "Surge pricing" --story "pricing-service must ..."   # 1. story -> plan
+npm run hub -- status                                                            # 2. where is everything + exact next command
+# ... human reads stories/<slug>/impact-analysis.md ...
+npm run hub -- approve --story <slug> --all                                      # 3. HUMAN gate (recorded in the ledger)
+npm run hub -- orchestrate --story <slug>                                        # 4a. parallel agent run, or:
+npm run hub -- execute --story <slug>                                            # 4b. branches + TASK.md briefings
+npm run hub -- ledger verify --story <slug>                                      # 5. audit
+```
+
+`status` reads every story under `stories/` and prints its stage (planned → approved → orchestrated/branched, including aborted runs and why) plus the exact next command. `approve` is more than a YAML flip: it records **who** approved **which** services as a `human:<name>` entry in the story's hash-chained ledger, so every later dispatch traces back to a named human decision. `plan`/`execute`/`orchestrate`/`eval-gate`/`ledger`/`knowledge` pass through to the underlying tools unchanged.
+
+## GitHub Copilot integration
+
+This repo is set up to run its agent roles as **Copilot custom agents** — the same prompts serve interactive use (VS Code / Copilot CLI / coding agent) and programmatic orchestration.
+
+### Custom agents (`.github/agents/`)
+
+| Agent | Role | Invoked how |
+| --- | --- | --- |
+| `planner` | Story → plan via `hub plan`; briefs the human reviewer on blast radius, contracts, merge order. Never approves. | `copilot --agent=planner` in this repo |
+| `implementer` | Executes one `.story/<slug>/TASK.md` briefing; treats context-pack contracts as authoritative; emits the handoff-compatible summary format (`Decision:`/`Contract:`/`TODO:` lines, backticked symbols) | On a story branch, or by the orchestrator |
+| `reviewer` | Reviews a story-branch diff against its briefing: contract violations, scope escapes, merge-order hazards; reports everything with confidence + severity | `copilot --agent=reviewer` on a story branch |
+| `ledger-auditor` | Compliance: chain integrity, approval provenance, model accountability, budget discipline, override hygiene | `copilot --agent=ledger-auditor` in this repo |
+
+Two integration details are load-bearing:
+
+- **The implementer's output format is machine-parsed.** Its prompt mandates exactly the line shapes the handoff compactor ([`orchestrator/handoff.mjs`](orchestrator/handoff.mjs)) preserves verbatim — so decisions, contract changes, and open questions survive into downstream agents' prompts uncompressed.
+- **The auditor closes the accountability loop.** `hub approve` writes `human:<name>` approval entries; the orchestrator writes dispatch/completion/swap entries; the auditor's checklist (every dispatch traces to a named approval, every override has a reason) reads exactly what the other layers write.
+
+`.github/copilot-instructions.md` gives every Copilot surface the repo-wide rules (bundle-only facts, human-only approval gate, never edit ledgers/generated files, fail-closed is intentional).
+
+### Programmatic dispatch (orchestrator → Copilot)
+
+```
+hub orchestrate ──▶ cmd runner ──▶ orchestrator/adapters/copilot.mjs
+                                      │  TASK_AGENT ──(config.yaml copilotAgent)──▶ --agent=<name>
+                                      ▼
+                    copilot --agent=implementer -p "Read <briefing path> ..." --allow-all
+```
+
+Enable it once in `agent-hub.config.yaml` (`runner: { type: cmd, cmd: node orchestrator/adapters/copilot.mjs }`); per-run override stays available via `--runner`/`--cmd` flags. Task briefings written by `hub execute` also embed the exact `copilot --agent=... -p "..."` command, so a developer picking up a story branch by hand runs the same agent the orchestrator would.
 
 ## Repository layout
 
 | Path | Contents |
 | --- | --- |
+| `agent-hub.config.yaml` | Central team config: wiki path, repos root, default runner (env-overridable) |
+| `hub.mjs` | The flow CLI: `plan` / `status` / `approve` / `execute` / `orchestrate` / `ledger` |
+| `lib/project-config.mjs` | Config loader (env > config file > default) |
+| `.github/copilot-instructions.md` | Repo-wide Copilot rules (gates, generated files, command surface) |
+| `.github/agents/*.agent.md` | Copilot custom agents: `planner`, `implementer`, `reviewer`, `ledger-auditor` |
+| `orchestrator/adapters/copilot.mjs` | Cross-platform Copilot CLI adapter for the cmd runner |
 | `knowledge-client/client.mjs` | Library: typed accessors over the bundle (see API below) |
 | `knowledge-client/cli.mjs` | CLI wrapper (`npm run knowledge -- …`) |
 | `story-planner/plan-story.mjs` | Story → per-service plan + context packs |
@@ -131,14 +197,14 @@ Afterwards `service-tasks.yaml` is updated in place (`status: branched|pr-opened
 
 ```bash
 # 1. plan
-npm run plan-story -- --title "Surge pricing on fare estimates" --story "..."
+npm run hub -- plan --title "Surge pricing on fare estimates" --story "..."
 
-# 2. human review
-#    read stories/surge-pricing-on-fare-estimates/impact-analysis.md
-#    set approved: true per task in service-tasks.yaml
+# 2. human review + ledger-recorded approval
+#    read stories/surge-pricing-on-fare-estimates/impact-analysis.md, then:
+npm run hub -- approve --story surge-pricing-on-fare-estimates --all
 
 # 3. execute (local branches only; add --push for draft PRs)
-npm run execute-story -- --story surge-pricing-on-fare-estimates
+npm run hub -- execute --story surge-pricing-on-fare-estimates
 
 # result:
 #   pricing-service: branch story/.../pricing-service with .story/<slug>/TASK.md
@@ -242,28 +308,14 @@ Save each script under `orchestrator/adapters/<system>.sh` and `chmod +x` it (th
    ```
 5. **Swap-detection note** — passing `--model "$TASK_MODEL_PIN"` explicitly means Claude Code answers with that exact model or errors outright; it isn't the opaque per-tier routing this layer was built to catch. Leaving the swap detector on here still catches wrapper bugs (wrong ID, stale CLI) — the real payoff is on the next two systems.
 
-### GitHub Copilot
+### GitHub Copilot (first-class — see [GitHub Copilot integration](#github-copilot-integration))
+
+Copilot is this repo's primary integration and ships committed, not as a stub:
 
 1. **Install & auth** — `npm install -g @github/copilot` (Homebrew/WinGet/install-script variants also exist); run `copilot` and complete `/login`, or authenticate with a fine-grained PAT scoped to "Copilot Requests".
-2. **Adapter script** — as of this writing, GitHub does not publicly document a non-interactive/scripted invocation, nor a way to read back which underlying model actually served a request (model choice is the interactive `/model` slash command). Confirm what your installed version supports before wiring anything in:
-   ```bash
-   copilot --help   # look for a print/prompt/stdin-style flag
-   ```
-   This is precisely the silent-substitution scenario the model-swap layer exists for — GitHub's own docs describe per-plan-tier model routing with no confirmed way to observe it from the CLI. Once you've found the real invocation, adapt this stub without inventing a `model` value:
-   ```bash
-   #!/usr/bin/env bash
-   set -euo pipefail
-   prompt="$(cat "$TASK_PROMPT_PATH")"
-   output="$(copilot --REPLACE-WITH-CONFIRMED-FLAG "$prompt")"   # confirm against --help first
-   echo "$output"
-   # Copilot does not confirm-report usage/model -> omit "model", estimate tokens.
-   jq -n --arg out "$output" \
-     '{usage: {inputTokens: (($out | length) / 4 | floor), outputTokens: (($out | length) / 4 | floor)}}' \
-     > "$TASK_RESULT_PATH"
-   ```
-3. **Pin** — set the agent's `pinnedModel` in `orchestrator/config.yaml` to a label you control (e.g. `copilot-default`), not a real model ID — Copilot doesn't echo one back, so this is bookkeeping, not verification.
-4. **Run**: same two commands as Claude, pointed at the Copilot adapter.
-5. **Swap-detection note** — expect `modelVerified: false` on every dispatch through this adapter; that's the harness correctly refusing to assert something it can't confirm, not a bug. Re-check `copilot --help` periodically in case a future release adds model reporting, at which point step 2's script should populate `model` for real and the swap detector starts doing its actual job here.
+2. **Adapter** — already committed at [`orchestrator/adapters/copilot.mjs`](orchestrator/adapters/copilot.mjs) (cross-platform Node, no bash/jq required). It maps the task's orchestrator agent to a Copilot custom agent (`agents.<id>.copilotAgent` in `orchestrator/config.yaml` → `.github/agents/<name>.agent.md`) and invokes `copilot --agent=<name> -p "<read-the-briefing instruction>" --allow-all`. The briefing is passed by *path*, not inlined — it can exceed argv limits, and the custom agents have file tools. Sanity-check the resolved invocation without calling Copilot: `node orchestrator/adapters/copilot.mjs --check`.
+3. **Enable it** — in `agent-hub.config.yaml`: `runner: { type: cmd, cmd: node orchestrator/adapters/copilot.mjs }`. Now plain `npm run hub -- orchestrate --story <slug>` dispatches through Copilot with no flags.
+4. **Swap-detection note** — the Copilot CLI reports usage via the interactive `/usage` command but not programmatically, and never reports which underlying model served a request; the adapter therefore deliberately writes **no** result file. The runner charges the full reserved ceiling (pessimistic) and the ledger records `modelVerified: false` — the honest state, not a bug. GitHub's per-plan-tier model routing is exactly the silent-substitution scenario the eval gate exists for, so lean on scheduled `eval-gate` runs (behavioral drift detection) rather than model-id pins for this system.
 
 ### OpenAI Codex
 

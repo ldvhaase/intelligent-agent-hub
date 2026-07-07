@@ -19,11 +19,9 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 import YAML from "yaml";
-
-const AGENT_HUB_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+import { AGENT_HUB_ROOT, reposRoot as configuredReposRoot } from "../lib/project-config.mjs";
 
 function fail(msg) {
   console.error(`error: ${msg}`);
@@ -46,7 +44,7 @@ if (!storyArg) fail("usage: execute-story --story <slug> [--repos-root dir] [--p
 const storyDir = existsSync(join(storyArg, "story.yaml")) ? storyArg : join(AGENT_HUB_ROOT, "stories", storyArg);
 if (!existsSync(join(storyDir, "story.yaml"))) fail(`story not found: ${storyDir} (run plan-story first)`);
 
-const reposRoot = resolve(flag("repos-root") ?? join(AGENT_HUB_ROOT, ".."));
+const reposRoot = resolve(flag("repos-root") ?? configuredReposRoot());
 const push = hasFlag("push");
 const dryRun = hasFlag("dry-run");
 
@@ -106,6 +104,7 @@ for (const t of approved) {
   const baseCommit = git(repoDir, "rev-parse", "HEAD");
   git(repoDir, "checkout", "-b", t.branch);
   try {
+    const agentId = t.agent ?? "implementer";
     const briefing = [
       `# Task briefing: ${story.title}`,
       "",
@@ -114,6 +113,17 @@ for (const t of approved) {
       `- Branch: ${t.branch}`,
       `- Base commit: ${baseCommit}`,
       `- Bundle: ${story.bundleVersion}`,
+      `- Agent: ${agentId}`,
+      "",
+      `## How to run this task`,
+      "",
+      `With the GitHub Copilot CLI, from this repo on this branch:`,
+      "",
+      "```",
+      `copilot --agent=${agentId} -p "Read .story/${slug}/TASK.md and complete the task it describes."`,
+      "```",
+      "",
+      `(The custom agent is defined in agent-hub's .github/agents/${agentId}.agent.md.)`,
       "",
       `## Task`,
       "",

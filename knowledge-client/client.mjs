@@ -1,19 +1,17 @@
 // Knowledge client: stable read-only interface over the wiki knowledge bundle.
-// The wiki checkout location comes from KNOWLEDGE_WIKI_PATH (default: ../knowledge-network
-// relative to the agent-hub root).
+// The wiki checkout location comes from KNOWLEDGE_WIKI_PATH, then
+// agent-hub.config.yaml (knowledgeWikiPath), then ../knowledge-network.
 
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import YAML from "yaml";
-
-const AGENT_HUB_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+import { knowledgeWikiPath } from "../lib/project-config.mjs";
 
 export function wikiPath() {
-  const p = resolve(process.env.KNOWLEDGE_WIKI_PATH ?? join(AGENT_HUB_ROOT, "..", "knowledge-network"));
+  const p = knowledgeWikiPath();
   if (!existsSync(join(p, "knowledge", "bundle", "manifest.json"))) {
     throw new Error(
-      `knowledge bundle not found under ${p} (set KNOWLEDGE_WIKI_PATH to your wiki checkout)`
+      `knowledge bundle not found under ${p} (set knowledgeWikiPath in agent-hub.config.yaml or the KNOWLEDGE_WIKI_PATH env var)`
     );
   }
   return p;

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "hub": "node hub.mjs",
     "knowledge": "node knowledge-client/cli.mjs",
     "plan-story": "node story-planner/plan-story.mjs",
     "execute-story": "node story-planner/execute-story.mjs",

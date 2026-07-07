@@ -28,6 +28,7 @@ import YAML from "yaml";
 import { AGENT_HUB_ROOT, BASELINES_PATH, PROBES_DIR, loadConfig, getAgent } from "./config.mjs";
 import { assessDrift, baselineKey, loadBaselines, saveBaselines, scoreOutput } from "./model-registry.mjs";
 import { createRunner } from "./runner.mjs";
+import { runnerDefaults } from "../lib/project-config.mjs";
 
 function fail(msg) {
   console.error(`error: ${msg}`);
@@ -48,7 +49,8 @@ const config = loadConfig();
 const record = hasFlag("record");
 const accept = hasFlag("accept");
 const agentFilter = flag("agent");
-const runner = createRunner({ type: flag("runner") ?? "dry-run", cmd: flag("cmd") });
+const runnerCfg = runnerDefaults();
+const runner = createRunner({ type: flag("runner") ?? runnerCfg.type, cmd: flag("cmd") ?? runnerCfg.cmd });
 
 if (!existsSync(PROBES_DIR)) fail(`no probes directory at ${PROBES_DIR}`);
 const probeFiles = readdirSync(PROBES_DIR).filter((f) => /\.ya?ml$/.test(f)).sort();
