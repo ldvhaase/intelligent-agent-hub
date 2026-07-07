@@ -10,6 +10,8 @@
     "orchestrate": "node orchestrator/orchestrate.mjs",
     "eval-gate": "node orchestrator/eval-gate.mjs",
     "ledger": "node orchestrator/ledger-cli.mjs",
+    "audit:summary": "node audit/audit-summary.mjs",
+    "audit:clear": "node audit/audit-clear.mjs",
     "test": "node --test"
   },
   "dependencies": {

@@ -1,0 +1,17 @@
+{
+  "version": "2026-07-06",
+  "models": {
+    "gpt-5.5-thinking": {
+      "inputPer1MTokensUsd": 0,
+      "cachedInputPer1MTokensUsd": 0,
+      "outputPer1MTokensUsd": 0,
+      "reasoningPer1MTokensUsd": 0
+    },
+    "default": {
+      "inputPer1MTokensUsd": 0,
+      "cachedInputPer1MTokensUsd": 0,
+      "outputPer1MTokensUsd": 0,
+      "reasoningPer1MTokensUsd": 0
+    }
+  }
+}
